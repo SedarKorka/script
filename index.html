@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="frame-ancestors https://*.sharepoint.com" />
+    <meta name="GENERATOR" content="Microsoft SharePoint">
+    <meta name="progid" content="SharePoint.WebPartPage.Document">
+    <title>Système de Calcul des Coûts de Transport</title>
+    
+    <!-- CSS Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- CSS Leaflet Routing Machine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+    <link rel="stylesheet" href="https://script-olive-two.vercel.app/styles.css"/>
+    
+    <!-- Bibliothèques JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+</head>
+<body>
+    <!-- Indicateur de chargement -->
+    <div class="loading" id="loading">Génération du PDF en cours...</div>
+
+    <!-- Conteneur principal -->
+    <div class="transport-system" id="transport-system">
+        <div class="header">
+            <div class="action-buttons">
+                <button class="reset-btn" onclick="resetMap()">Tout Réinitialiser</button>
+                <button class="pdf-btn" onclick="generatePDF()">Télécharger PDF</button>
+                <button class="add-btn" onclick="addCalculation()">Ajouter</button>
+                <button class="show-total-btn" onclick="showAllCalculations()" style="display:none;">Afficher le Total</button>
+            </div>
+            <h1>Système de Calcul des Coûts de Transport</h1>
+        </div>
+
+        <!-- Message d'état SharePoint -->
+        <div id="sharepoint-loading-status"></div>
+
+        <!-- Panneau de contrôle -->
+        <div class="control-panel">
+            <div class="selection-section">
+                <div class="step-indicator">
+                    <div id="step1" class="step">1. Collecte</div>
+                    <div id="step2" class="step">2. Ferry</div>
+                    <div id="step3" class="step">3. Livraison</div>
+                </div>
+
+                <div class="selection-mode">
+                    <h3>Mode de Sélection :</h3>
+                    <div class="mode-options">
+                        <button id="address-mode-btn" onclick="setSelectionMode('address')">Recherche par Adresse</button>
+                        <button id="map-mode-btn" onclick="setSelectionMode('map')">Clic sur la Carte</button>
+                    </div>
+                </div>
+
+                <div class="ferry-selection">
+                    <h3>Sélectionnez votre Ferry :</h3>
+                    <select id="ferry-select">
+                        <option value="">-- Sélectionnez un ferry --</option>
+                    </select>
+                </div>
+
+                <div class="search-box">
+                    <h3>Rechercher une adresse :</h3>
+                    <div class="search-input">
+                        <input type="text" id="search-input" placeholder="Ex: Paris, Lyon" />
+                        <button onclick="searchAddress()">Rechercher</button>
+                    </div>
+                    <div id="search-results"></div>
+                </div>
+
+                <div class="current-selection" style="display: none;">
+                    <h3>Sélection Courante :</h3>
+                    <p><strong>Collecte :</strong> <span id="current-collection">Non sélectionné</span></p>
+                    <p><strong>Ferry :</strong> <span id="current-ferry">Non sélectionné</span></p>
+                    <p><strong>Livraison :</strong> <span id="current-delivery">Non sélectionné</span></p>
+                </div>
+            </div>
+
+            <div id="map"></div>
+
+            <div class="map-error" id="map-error">
+                <p>Veuillez réessayer de sélectionner l'emplacement ou utiliser la recherche d'adresse.</p>
+                <button onclick="hideMapError()">OK</button>
+            </div>
+        </div>
+        
+        <div class="saved-calculations" id="saved-calculations" style="display:none;">
+            <h2>Prix Total</h2>
+            <div id="calculations-list"></div>
+            <div class="grand-total" id="grand-total"></div>
+        </div>
+
+        <!-- Sections des résultats -->
+        <div class="results-container">
+            <div class="route" id="route1">
+                <h2>Itinéraire de Collecte (Chargement → Départ Ferry)</h2>
+                <p><strong>De :</strong> <span class="address" id="from1">Non défini</span></p>
+                <p><strong>À :</strong> <span class="address" id="to1">Non défini</span></p>
+                <div class="calculation">
+                    <p>Distance : <span id="distance1">0 km</span></p>
+                    <p>Prix collecte (<span id="price-per-km">€0/km</span>) : <span id="collection-price">0 €</span></p>
+                    <p>Minimum <span id="minimum-price">€0</span> → Prix final : <span id="final-collection">0 €</span></p>
+                </div>
+            </div>
+
+            <div class="route" id="route2">
+                <h2>Itinéraire de Livraison (Arrivée Ferry → Livraison)</h2>
+                <p><strong>De :</strong> <span class="address" id="from2">Non défini</span></p>
+                <p><strong>À :</strong> <span class="address" id="to2">Non défini</span></p>
+                <div class="calculation">
+                    <p>Distance : <span id="distance2">0 km</span></p>
+                    <p>Prix livraison (<span id="delivery-price-per-km">€0/km</span>) : <span id="delivery-price">0 €</span></p>
+                    <p>Minimum <span id="delivery-minimum-price">€0</span> → Prix final : <span id="final-delivery">0 €</span></p>
+                </div>
+            </div>
+
+            <div class="additional-costs">
+                <div class="route" id="additional-cost">
+                    <h2>Coûts Supplémentaires</h2>
+                    <div class="calculation">
+                        <p>Ferry : <span id="ferry-cost">0 €</span></p>
+                    </div>
+                </div>
+
+                <div class="route" id="margin-control">
+                    <h2>Marge Entreprise</h2>
+                    <div class="slider-container">
+                        <input type="range" id="margin-slider" min="-50" max="50" value="0" step="1" />
+                        <span id="margin-value">0%</span>
+                    </div>
+                    <p>Application : <span id="margin-type">Aucune</span> de <span id="margin-amount">0%</span></p>
+                </div>
+            </div>
+
+            <div id="box1">
+                <div class="total-box" id="total-box">
+                    <h2>Total à Payer</h2>
+                    <p>Collecte : <span id="display-collection">0 €</span></p>
+                    <p>Livraison : <span id="display-delivery">0 €</span></p>
+                    <p>Ferry : <span id="display-ferry">0 €</span></p>
+                    <p>Marge/Remise : <span id="display-margin">0 €</span></p>
+                    <hr />
+                    <p class="final-total">
+                        <strong>Total final : <span id="total-cost">0 €</span></strong>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script JS -->
+    <script src="https://script-olive-two.vercel.app/script.js"></script>
+</body>
+</html>

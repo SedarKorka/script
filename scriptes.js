@@ -1,8 +1,7 @@
-// Transport Cost Calculation System - Complete code
 'use strict';
 
 // ======================
-// GLOBAL VARIABLES
+// CONFIGURATION GLOBALE
 // ======================
 let map;
 let markers = [];
@@ -12,70 +11,67 @@ let savedCalculations = [];
 let calculationId = 0;
 const FERRY_TERMINALS = {};
 
-// Price configuration
+// Configuration des prix par défaut
 const CONFIG = {
   collectionPricePerKm: 2,
-  collectionPricePerKmCork: 2.5,
   collectionMinPrice: 450,
   deliveryPricePerKm: 3,
   deliveryMinPrice: 300,
   ferryCost: 0
 };
 
-// Selection state
+// État de sélection
 const selectionState = {
-  mode: 'map',
-  step: 1,
+  mode: 'map', // 'map' ou 'address'
+  step: 1, // 1=Collection, 2=Ferry, 3=Delivery
   collectionStart: null,
   ferryRoute: null,
   deliveryEnd: null
 };
 
 // ======================
-// INITIALIZATION
+// INITIALISATION
 // ======================
 
 /**
- * Initializes the transport system
+ * Initialise le système de transport
  */
 function initializeTransportSystem() {
   try {
-    // Check if map container exists
-    const mapElement = document.getElementById('map');
-    if (!mapElement) throw new Error("Element #map not found");
+    // Vérifie si le conteneur de la carte existe
+    if (!document.getElementById('map')) {
+      throw new Error("Element #map non trouvé");
+    }
     
-    // Initialize Leaflet map
+    // Initialise la carte Leaflet
     initMap();
     
-    // Initialize ferry terminals
-    initializeFerryTerminals();
-    
-    // Configure controls and listeners
+    // Configure les contrôles et écouteurs
     setupControls();
     setupEventListeners();
     
-    // Update UI
+    // Met à jour l'UI
     updateStepUI();
     
-    console.log("System initialized successfully");
+    console.log("Système initialisé avec succès");
   } catch (error) {
-    console.error("Initialization error:", error);
-    showMapError("System initialization error");
+    console.error("Erreur d'initialisation:", error);
+    showMapError("Erreur d'initialisation du système");
   }
 }
 
 /**
- * Initializes Leaflet map
+ * Initialise la carte Leaflet
  */
 function initMap() {
   map = L.map('map', {
-    center: [46.603354, 1.888334], // Center on France
+    center: [46.603354, 1.888334], // Centre sur la France
     zoom: 6,
     preferCanvas: true,
     zoomControl: true
   });
 
-  // Add OpenStreetMap layer
+  // Ajoute la couche OpenStreetMap
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     maxZoom: 19,
@@ -84,65 +80,113 @@ function initMap() {
 }
 
 /**
- * Initializes ferry terminals from HTML table
- */
-function initializeFerryTerminals() {
-  try {
-    const rows = document.querySelectorAll("table tbody tr");
-    
-    rows.forEach(row => {
-      const cells = row.querySelectorAll("td");
-      if (cells.length >= 3) {
-        const terminalName = cells[0].textContent.trim();
-        const lat = parseFloat(cells[1].textContent.trim().replace(',', '.'));
-        const lng = parseFloat(cells[2].textContent.trim().replace(',', '.'));
-        
-        if (!isNaN(lat) && !isNaN(lng)) {
-          FERRY_TERMINALS[terminalName] = { lat, lng };
-        }
-      }
-    });
-  } catch (error) {
-    console.error("Error loading ferry terminals:", error);
-  }
-}
-
-// ======================
-// MAIN FUNCTIONS
-// ======================
-
-/**
- * Configures map controls
+ * Configure les contrôles de la carte
  */
 function setupControls() {
-  // Scale control
   L.control.scale({ imperial: false, metric: true }).addTo(map);
 }
 
 /**
- * Configures event listeners
+ * Configure les écouteurs d'événements
  */
 function setupEventListeners() {
-  // Margin slider
+  // Curseur de marge
   document.getElementById('margin-slider').addEventListener('input', function() {
     currentMargin = parseInt(this.value);
     updateMarginDisplay();
     calculateTotal();
   });
 
-  // Ferry selection
+  // Sélection du ferry
   document.getElementById('ferry-select').addEventListener('change', updateFerrySelection);
 
-  // Mode buttons
+  // Boutons de mode
   document.getElementById('address-mode-btn').addEventListener('click', () => setSelectionMode('address'));
   document.getElementById('map-mode-btn').addEventListener('click', () => setSelectionMode('map'));
 
-  // Map click
+  // Clic sur la carte
   map.on('click', handleMapClick);
 }
 
+// ======================
+// FONCTIONS PRINCIPALES
+// ======================
+
 /**
- * Handles map click
+ * Charge les ferries depuis SharePoint
+ */
+async function loadFerriesFromSharePoint() {
+  try {
+    const listTitle = "NomDeVotreListe"; // À remplacer par le nom réel de votre liste
+    const response = await fetch(`${_spPageContextInfo.webAbsoluteUrl}/_api/web/lists/getbytitle('${listTitle}')/items`, {
+      headers: {
+        'Accept': 'application/json;odata=nometadata',
+        'Content-Type': 'application/json;odata=nometadata'
+      },
+      credentials: 'include'
+    });
+
+    if (!response.ok) throw new Error('Échec du chargement des ferries');
+
+    const data = await response.json();
+    const ferrySelect = document.getElementById('ferry-select');
+    ferrySelect.innerHTML = '<option value="">-- Sélectionnez un ferry --</option>';
+
+    data.value.forEach(item => {
+      // Analyse les données spécifiques à votre structure
+      const ferryData = parseFerryData(item);
+      
+      const option = document.createElement('option');
+      option.value = `${ferryData.price}.${ferryData.departure}.${ferryData.arrival}.${ferryData.pricePerKm}.${ferryData.minPrice}`;
+      option.textContent = `${ferryData.name}: ${ferryData.departure} → ${ferryData.arrival}`;
+      ferrySelect.appendChild(option);
+
+      // Stocke les coordonnées des terminaux
+      FERRY_TERMINALS[ferryData.departure] = { 
+        lat: ferryData.departureLat, 
+        lng: ferryData.departureLng 
+      };
+      
+      if (ferryData.arrivalLat && ferryData.arrivalLng) {
+        FERRY_TERMINALS[ferryData.arrival] = { 
+          lat: ferryData.arrivalLat, 
+          lng: ferryData.arrivalLng 
+        };
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erreur de chargement des ferries:', error);
+    showMapError('Impossible de charger les données des ferries');
+  }
+}
+
+/**
+ * Analyse les données d'un ferry depuis l'item SharePoint
+ */
+function parseFerryData(item) {
+  // Adaptez cette fonction selon la structure exacte de vos données
+  // Exemple basé sur l'image fournie:
+  
+  // Pour un item comme "CLDN DUB-ZEL - Dude-Pint 13.344410307895 - 4.341030641889 - Interrupt Port Service 2000 € - In Port 100"
+  const parts = item.Title.split(' - ');
+  
+  return {
+    name: parts[0].trim(), // "CLDN DUB-ZEL"
+    departure: parts[1].split(' ')[0], // "Dude-Pint"
+    departureLat: parseFloat(parts[1].split(' ')[1]), // 13.344...
+    departureLng: parseFloat(parts[2]), // 4.341...
+    arrival: parts[0].split('-')[1], // "ZEL" (extrait du nom)
+    service: parts[3], // "Interrupt Port Service"
+    price: parseInt(parts[4].replace(' €', '')), // 2000
+    portType: parts[5], // "In Port"
+    pricePerKm: parseInt(parts[6]), // 100
+    minPrice: parseInt(parts[4].replace(' €', '')) * 0.2 // 20% du prix
+  };
+}
+
+/**
+ * Gère le clic sur la carte
  */
 async function handleMapClick(e) {
   if (selectionState.mode !== 'map') return;
@@ -150,28 +194,28 @@ async function handleMapClick(e) {
   const { lat, lng } = e.latlng;
 
   try {
-    // Show temporary marker
+    // Affiche un marqueur temporaire
     const tempMarker = createMarker([lat, lng], 'temp');
-    tempMarker.bindPopup("<b>Loading...</b>").openPopup();
+    tempMarker.bindPopup("<b>Chargement...</b>").openPopup();
 
-    // Get address name
+    // Récupère le nom de l'adresse
     const name = await getAddressName(lat, lng);
     map.removeLayer(tempMarker);
 
-    // Handle based on step
+    // Gère en fonction de l'étape
     if (selectionState.step === 1) {
       handleCollectionSelection(lat, lng, name);
     } else if (selectionState.step === 3) {
       handleDeliverySelection(lat, lng, name);
     }
   } catch (error) {
-    console.error("Map click error:", error);
-    showMapError("Selection error");
+    console.error("Erreur de clic sur la carte:", error);
+    showMapError("Erreur de sélection");
   }
 }
 
 /**
- * Handles collection point selection
+ * Gère la sélection du point de collecte
  */
 function handleCollectionSelection(lat, lng, name) {
   selectionState.collectionStart = { lat, lng, name };
@@ -183,11 +227,11 @@ function handleCollectionSelection(lat, lng, name) {
 }
 
 /**
- * Handles delivery point selection
+ * Gère la sélection du point de livraison
  */
 function handleDeliverySelection(lat, lng, name) {
   if (!selectionState.ferryRoute) {
-    showMapError("Please select ferry first");
+    showMapError("Veuillez d'abord sélectionner un ferry");
     return;
   }
 
@@ -200,11 +244,11 @@ function handleDeliverySelection(lat, lng, name) {
 }
 
 // ======================
-// UI FUNCTIONS
+// FONCTIONS D'INTERFACE
 // ======================
 
 /**
- * Updates step UI
+ * Met à jour l'affichage des étapes
  */
 function updateStepUI() {
   document.querySelectorAll('.step').forEach(step => {
@@ -226,38 +270,38 @@ function updateStepUI() {
 }
 
 /**
- * Updates margin display
+ * Met à jour l'affichage de la marge
  */
 function updateMarginDisplay() {
   document.getElementById('margin-value').textContent = `${currentMargin}%`;
   document.getElementById('margin-amount').textContent = `${Math.abs(currentMargin)}%`;
   
   const marginType = document.getElementById('margin-type');
-  marginType.textContent = currentMargin > 0 ? "Discount" : currentMargin < 0 ? "Margin" : "None";
+  marginType.textContent = currentMargin > 0 ? "Remise" : currentMargin < 0 ? "Marge" : "Aucune";
 }
 
 /**
- * Updates current selection display
+ * Met à jour l'affichage des sélections courantes
  */
 function updateCurrentSelection() {
   document.getElementById('current-collection').textContent =
-    selectionState.collectionStart?.name || 'Not selected';
+    selectionState.collectionStart?.name || 'Non sélectionné';
 
   document.getElementById('current-ferry').textContent =
     selectionState.ferryRoute 
       ? `${selectionState.ferryRoute.departure} → ${selectionState.ferryRoute.arrival} (${selectionState.ferryRoute.price}€)`
-      : 'Not selected';
+      : 'Non sélectionné';
 
   document.getElementById('current-delivery').textContent =
-    selectionState.deliveryEnd?.name || 'Not selected';
+    selectionState.deliveryEnd?.name || 'Non sélectionné';
 }
 
 // ======================
-// MAP FUNCTIONS
+// FONCTIONS DE LA CARTE
 // ======================
 
 /**
- * Creates a map marker
+ * Crée un marqueur sur la carte
  */
 function createMarker(latlng, type) {
   const icons = {
@@ -284,10 +328,10 @@ function createMarker(latlng, type) {
 }
 
 /**
- * Adds a point to the map
+ * Ajoute un point à la carte
  */
 function addPoint(lat, lng, name, type) {
-  // Remove old markers of same type
+  // Supprime les anciens marqueurs du même type
   markers.forEach(marker => {
     const iconUrl = marker.options?.icon?.options?.iconUrl || '';
     if ((type === 'collection' && iconUrl.includes('blue')) || 
@@ -296,16 +340,16 @@ function addPoint(lat, lng, name, type) {
     }
   });
 
-  // Create new marker
+  // Crée un nouveau marqueur
   const marker = createMarker([lat, lng], type);
   marker.bindPopup(`<b>${name}</b>`);
 }
 
 /**
- * Adds ferry terminals to the map
+ * Ajoute les terminaux de ferry à la carte
  */
 function addFerryTerminals(departure, arrival) {
-  // Remove old ferry markers
+  // Supprime les anciens marqueurs de ferry
   markers.forEach(marker => {
     const iconUrl = marker.options?.icon?.options?.iconUrl || '';
     if (iconUrl.includes('green') || iconUrl.includes('orange')) {
@@ -313,40 +357,40 @@ function addFerryTerminals(departure, arrival) {
     }
   });
 
-  // Add departure terminal
+  // Ajoute le terminal de départ
   if (FERRY_TERMINALS[departure]) {
     const marker = createMarker(
       [FERRY_TERMINALS[departure].lat, FERRY_TERMINALS[departure].lng], 
       'ferryDeparture'
     );
-    marker.bindPopup(`<b>Ferry departure: ${departure}</b>`);
+    marker.bindPopup(`<b>Départ ferry: ${departure}</b>`);
   }
 
-  // Add arrival terminal
+  // Ajoute le terminal d'arrivée
   if (FERRY_TERMINALS[arrival]) {
     const marker = createMarker(
       [FERRY_TERMINALS[arrival].lat, FERRY_TERMINALS[arrival].lng], 
       'ferryArrival'
     );
-    marker.bindPopup(`<b>Ferry arrival: ${arrival}</b>`);
+    marker.bindPopup(`<b>Arrivée ferry: ${arrival}</b>`);
   }
 }
 
 // ======================
-// ROUTE CALCULATION
+// CALCUL DES ITINÉRAIRES
 // ======================
 
 /**
- * Calculates both routes (collection and delivery)
+ * Calcule les deux itinéraires (collecte et livraison)
  */
 function calculateAllRoutes() {
   if (!selectionState.collectionStart || !selectionState.ferryRoute || !selectionState.deliveryEnd) {
-    console.error("Missing parameters");
+    console.error("Paramètres manquants");
     return;
   }
 
   try {
-    // Remove old routes
+    // Supprime les anciens itinéraires
     if (routingControl1) map.removeControl(routingControl1);
     if (routingControl2) map.removeControl(routingControl2);
 
@@ -355,53 +399,53 @@ function calculateAllRoutes() {
     const arrivalTerminal = FERRY_TERMINALS[arrival];
 
     if (!departureTerminal || !arrivalTerminal) {
-      throw new Error("Terminal coordinates not found");
+      throw new Error("Coordonnées des terminaux non trouvées");
     }
 
-    // Collection route
+    // Itinéraire de collecte
     routingControl1 = createRouteControl(
       [selectionState.collectionStart.lat, selectionState.collectionStart.lng],
       [departureTerminal.lat, departureTerminal.lng],
       '#3498db'
     );
 
-    // Delivery route
+    // Itinéraire de livraison
     routingControl2 = createRouteControl(
       [arrivalTerminal.lat, arrivalTerminal.lng],
       [selectionState.deliveryEnd.lat, selectionState.deliveryEnd.lng],
       '#e74c3c'
     );
 
-    // Events for collection route
+    // Événements pour l'itinéraire de collecte
     routingControl1.on('routesfound', e => {
       const distance = (e.routes[0].summary.totalDistance / 1000).toFixed(1);
       updateRouteDisplay(distance, null);
     });
 
     routingControl1.on('routingerror', e => {
-      console.error("Route error:", e.error);
-      showMapError("Cannot calculate collection route");
+      console.error("Erreur d'itinéraire:", e.error);
+      showMapError("Impossible de calculer l'itinéraire de collecte");
     });
 
-    // Events for delivery route
+    // Événements pour l'itinéraire de livraison
     routingControl2.on('routesfound', e => {
       const distance = (e.routes[0].summary.totalDistance / 1000).toFixed(1);
       updateRouteDisplay(null, distance);
     });
 
     routingControl2.on('routingerror', e => {
-      console.error("Route error:", e.error);
-      showMapError("Cannot calculate delivery route");
+      console.error("Erreur d'itinéraire:", e.error);
+      showMapError("Impossible de calculer l'itinéraire de livraison");
     });
 
   } catch (error) {
-    console.error("Route calculation error:", error);
-    showMapError("Route calculation error");
+    console.error("Erreur de calcul d'itinéraire:", error);
+    showMapError("Erreur de calcul d'itinéraire");
   }
 }
 
 /**
- * Creates a route control
+ * Crée un contrôle d'itinéraire
  */
 function createRouteControl(start, end, color) {
   return L.Routing.control({
@@ -420,20 +464,20 @@ function createRouteControl(start, end, color) {
 }
 
 // ======================
-// GEOCODING
+// GÉOCODAGE
 // ======================
 
 /**
- * Gets address name from coordinates
+ * Obtient le nom d'une adresse à partir de coordonnées
  */
 async function getAddressName(lat, lng) {
   let address = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
 
   try {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=en`);
+    const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1&accept-language=fr`);
 
-    if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+    if (!response.ok) throw new Error(`Erreur HTTP: ${response.status}`);
 
     const data = await response.json();
     if (data.display_name) {
@@ -450,7 +494,7 @@ async function getAddressName(lat, lng) {
       ].filter(Boolean).join(', ');
     }
   } catch (error) {
-    console.error("Geocoding error:", error);
+    console.error("Erreur de géocodage:", error);
     throw error;
   }
 
@@ -458,32 +502,32 @@ async function getAddressName(lat, lng) {
 }
 
 /**
- * Searches for an address
+ * Recherche une adresse
  */
 window.searchAddress = async function() {
   if (selectionState.mode !== 'address') {
-    showMapError("Switch to address search mode");
+    showMapError("Passez en mode recherche par adresse");
     return;
   }
 
   const query = document.getElementById('search-input').value.trim();
   if (!query) {
-    showMapError("Enter an address to search");
+    showMapError("Entrez une adresse à rechercher");
     return;
   }
 
   const resultsContainer = document.getElementById('search-results');
-  resultsContainer.innerHTML = "<p>Searching...</p>";
+  resultsContainer.innerHTML = "<p>Recherche en cours...</p>";
 
   try {
     await new Promise(resolve => setTimeout(resolve, 1000));
-    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=en`);
+    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&accept-language=fr`);
     
-    if (!response.ok) throw new Error("Network error");
+    if (!response.ok) throw new Error("Erreur réseau");
 
     const data = await response.json();
     if (data.length === 0) {
-      resultsContainer.innerHTML = "<p>No results found</p>";
+      resultsContainer.innerHTML = "<p>Aucun résultat trouvé</p>";
       return;
     }
 
@@ -495,19 +539,19 @@ window.searchAddress = async function() {
         <p><strong>${index + 1}. ${item.display_name}</strong></p>
         <button onclick="selectSearchResult(${item.lat}, ${item.lon}, '${item.display_name.replace(/'/g, "\\'")}')"
           class="select-btn">
-          Select
+          Sélectionner
         </button>
       `;
       resultsContainer.appendChild(resultElement);
     });
   } catch (error) {
-    console.error("Search error:", error);
-    resultsContainer.innerHTML = `<p>Error: ${error.message}</p>`;
+    console.error("Erreur de recherche:", error);
+    resultsContainer.innerHTML = `<p>Erreur: ${error.message}</p>`;
   }
 };
 
 /**
- * Selects a search result
+ * Sélectionne un résultat de recherche
  */
 window.selectSearchResult = function(lat, lng, name) {
   try {
@@ -521,17 +565,17 @@ window.selectSearchResult = function(lat, lng, name) {
     document.getElementById('search-input').value = '';
     map.setView([lat, lng], 12);
   } catch (error) {
-    console.error("Selection error:", error);
-    showMapError("Selection error");
+    console.error("Erreur de sélection:", error);
+    showMapError("Erreur de sélection");
   }
 };
 
 // ======================
-// FERRY MANAGEMENT
+// GESTION DES FERRIES
 // ======================
 
 /**
- * Updates ferry selection
+ * Met à jour la sélection du ferry
  */
 function updateFerrySelection() {
   const select = document.getElementById('ferry-select');
@@ -539,30 +583,30 @@ function updateFerrySelection() {
   
   if (selectedOption.value) {
     if (!selectionState.collectionStart) {
-      showMapError("Please select collection point first");
+      showMapError("Veuillez d'abord sélectionner un point de collecte");
       select.value = "";
       return;
     }
 
     const [price, departure, arrival, pricePerKm, minimum] = selectedOption.value.split('.');
     
-    // Update configuration
+    // Met à jour la configuration
     CONFIG.ferryCost = parseInt(price);
     CONFIG.collectionPricePerKm = parseFloat(pricePerKm);
     CONFIG.collectionMinPrice = parseFloat(minimum);
     CONFIG.deliveryPricePerKm = parseFloat(pricePerKm);
     CONFIG.deliveryMinPrice = parseFloat(minimum);
 
-    // Update display
+    // Met à jour l'affichage
     updatePriceDisplays(pricePerKm, minimum);
     
-    // Save selection
+    // Enregistre la sélection
     selectionState.ferryRoute = { departure, arrival, price };
     addFerryTerminals(departure, arrival);
     updateCurrentSelection();
     document.getElementById('ferry-cost').textContent = `${price} €`;
 
-    // Recalculate if delivery already selected
+    // Recalcule si la livraison est déjà sélectionnée
     if (selectionState.deliveryEnd) {
       calculateAllRoutes();
     }
@@ -573,30 +617,30 @@ function updateFerrySelection() {
 }
 
 /**
- * Updates price displays
+ * Met à jour l'affichage des prix
  */
 function updatePriceDisplays(pricePerKm, minimum) {
-  // Collection section
+  // Section collecte
   document.querySelector('#route1 .calculation').innerHTML = `
     <p>Distance: <span id="distance1">${document.getElementById('distance1').textContent}</span></p>
-    <p>Collection price (<span id="price-per-km">€${pricePerKm}/km</span>): <span id="collection-price">0 €</span></p>
-    <p>Minimum <span id="minimum-price">€${minimum}</span> → Final price: <span id="final-collection">0 €</span></p>
+    <p>Prix collecte (<span id="price-per-km">€${pricePerKm}/km</span>): <span id="collection-price">0 €</span></p>
+    <p>Minimum <span id="minimum-price">€${minimum}</span> → Prix final: <span id="final-collection">0 €</span></p>
   `;
 
-  // Delivery section
+  // Section livraison
   document.querySelector('#route2 .calculation').innerHTML = `
     <p>Distance: <span id="distance2">${document.getElementById('distance2').textContent}</span></p>
-    <p>Delivery price (<span id="delivery-price-per-km">€${pricePerKm}/km</span>): <span id="delivery-price">0 €</span></p>
-    <p>Minimum <span id="delivery-minimum-price">€${minimum}</span> → Final price: <span id="final-delivery">0 €</span></p>
+    <p>Prix livraison (<span id="delivery-price-per-km">€${pricePerKm}/km</span>): <span id="delivery-price">0 €</span></p>
+    <p>Minimum <span id="delivery-minimum-price">€${minimum}</span> → Prix final: <span id="final-delivery">0 €</span></p>
   `;
 }
 
 // ======================
-// CALCULATIONS AND DISPLAY
+// CALCULS ET AFFICHAGE
 // ======================
 
 /**
- * Updates route display
+ * Met à jour l'affichage de l'itinéraire
  */
 function updateRouteDisplay(collectionDistance, deliveryDistance) {
   if (collectionDistance !== null) {
@@ -629,7 +673,7 @@ function updateRouteDisplay(collectionDistance, deliveryDistance) {
 }
 
 /**
- * Calculates total
+ * Calcule le total
  */
 function calculateTotal() {
   const collection = parseFloat(document.getElementById('display-collection').textContent) || 0;
@@ -646,15 +690,54 @@ function calculateTotal() {
 }
 
 // ======================
-// CALCULATIONS MANAGEMENT
+// GESTION DES CALCULS
 // ======================
 
 /**
- * Adds a calculation to history
+ * Sauvegarde un calcul dans SharePoint
  */
-window.addCalculation = function() {
+async function saveCalculationToSharePoint(calculation) {
+  try {
+    const listTitle = "CalculsTransport"; // À adapter
+    const response = await fetch(`${_spPageContextInfo.webAbsoluteUrl}/_api/web/lists/getbytitle('${listTitle}')/items`, {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json;odata=nometadata',
+        'Content-Type': 'application/json;odata=nometadata',
+        'X-RequestDigest': document.getElementById('__REQUESTDIGEST').value
+      },
+      body: JSON.stringify({
+        __metadata: { type: `SP.Data.${listTitle}ListItem` },
+        Title: `Calcul ${new Date().toLocaleString()}`,
+        PointCollecte: selectionState.collectionStart?.name || '',
+        PointLivraison: selectionState.deliveryEnd?.name || '',
+        FerryUtilise: selectionState.ferryRoute ? 
+          `${selectionState.ferryRoute.departure} → ${selectionState.ferryRoute.arrival}` : '',
+        CoutCollecte: parseFloat(calculation.collection.replace(' €', '')),
+        CoutLivraison: parseFloat(calculation.delivery.replace(' €', '')),
+        CoutFerry: parseFloat(calculation.ferry.replace(' €', '')),
+        MargeRemise: parseFloat(calculation.margin.replace(' €', '')),
+        Total: parseFloat(calculation.total.replace(' €', '')),
+        DateCalcul: new Date().toISOString()
+      }),
+      credentials: 'include'
+    });
+
+    if (!response.ok) throw new Error('Échec de la sauvegarde');
+
+    return await response.json();
+  } catch (error) {
+    console.error('Erreur de sauvegarde:', error);
+    throw error;
+  }
+}
+
+/**
+ * Ajoute un calcul à l'historique
+ */
+window.addCalculation = async function() {
   if (!selectionState.collectionStart || !selectionState.ferryRoute || !selectionState.deliveryEnd) {
-    showMapError("Complete all steps");
+    showMapError("Complétez toutes les étapes");
     return;
   }
 
@@ -668,17 +751,22 @@ window.addCalculation = function() {
     date: new Date().toLocaleString()
   };
 
-  savedCalculations.push(calculation);
-  updateCalculationsList();
-  resetMap();
-  
-  if (savedCalculations.length > 0) {
-    document.querySelector('.show-total-btn').style.display = 'inline-block';
+  try {
+    await saveCalculationToSharePoint(calculation);
+    savedCalculations.push(calculation);
+    updateCalculationsList();
+    resetMap();
+    
+    if (savedCalculations.length > 0) {
+      document.querySelector('.show-total-btn').style.display = 'inline-block';
+    }
+  } catch (error) {
+    showMapError("Échec de la sauvegarde du calcul");
   }
 };
 
 /**
- * Shows/hides saved calculations
+ * Affiche/masque les calculs sauvegardés
  */
 window.showAllCalculations = function() {
   const savedCalculationsDiv = document.getElementById('saved-calculations');
@@ -687,7 +775,7 @@ window.showAllCalculations = function() {
 };
 
 /**
- * Updates calculations list
+ * Met à jour la liste des calculs
  */
 function updateCalculationsList() {
   const listDiv = document.getElementById('calculations-list');
@@ -700,12 +788,12 @@ function updateCalculationsList() {
       <button class="delete-calculation" onclick="deleteCalculation(${calc.id})">×</button>
       <ul>
         <li><strong>Date:</strong> ${calc.date}</li>
-        <li><strong>From:</strong> ${selectionState.collectionStart?.name || 'Not specified'}</li>
-        <li><strong>To:</strong> ${selectionState.deliveryEnd?.name || 'Not specified'}</li>
-        <li>Collection: ${calc.collection}</li>
-        <li>Delivery: ${calc.delivery}</li>
-        <li>Ferry cost: ${calc.ferry}</li>
-        <li>Margin/Discount: ${calc.margin}</li>
+        <li><strong>De:</strong> ${selectionState.collectionStart?.name || 'Non spécifié'}</li>
+        <li><strong>À:</strong> ${selectionState.deliveryEnd?.name || 'Non spécifié'}</li>
+        <li>Collecte: ${calc.collection}</li>
+        <li>Livraison: ${calc.delivery}</li>
+        <li>Ferry: ${calc.ferry}</li>
+        <li>Marge/Remise: ${calc.margin}</li>
         <li class="total"><strong>Total: ${calc.total}</strong></li>
       </ul>
     `;
@@ -714,21 +802,54 @@ function updateCalculationsList() {
 }
 
 /**
- * Deletes a calculation
+ * Supprime un calcul
  */
-window.deleteCalculation = function(id) {
-  savedCalculations = savedCalculations.filter(calc => calc.id !== id);
-  updateCalculationsList();
-  calculateGrandTotal();
-  
-  if (savedCalculations.length === 0) {
-    document.getElementById('saved-calculations').style.display = 'none';
-    document.querySelector('.show-total-btn').style.display = 'none';
+window.deleteCalculation = async function(id) {
+  try {
+    // Supprime de SharePoint si nécessaire
+    const calcToDelete = savedCalculations.find(c => c.id === id);
+    if (calcToDelete && calcToDelete.sharepointId) {
+      await deleteCalculationFromSharePoint(calcToDelete.sharepointId);
+    }
+    
+    // Supprime localement
+    savedCalculations = savedCalculations.filter(calc => calc.id !== id);
+    updateCalculationsList();
+    calculateGrandTotal();
+    
+    if (savedCalculations.length === 0) {
+      document.getElementById('saved-calculations').style.display = 'none';
+      document.querySelector('.show-total-btn').style.display = 'none';
+    }
+  } catch (error) {
+    console.error("Erreur de suppression:", error);
+    showMapError("Erreur lors de la suppression");
   }
 };
 
 /**
- * Calculates grand total
+ * Supprime un calcul de SharePoint
+ */
+async function deleteCalculationFromSharePoint(id) {
+  try {
+    const response = await fetch(`${_spPageContextInfo.webAbsoluteUrl}/_api/web/lists/getbytitle('CalculsTransport')/items(${id})`, {
+      method: 'DELETE',
+      headers: {
+        'X-RequestDigest': document.getElementById('__REQUESTDIGEST').value,
+        'IF-MATCH': '*'
+      },
+      credentials: 'include'
+    });
+
+    if (!response.ok) throw new Error('Échec de la suppression');
+  } catch (error) {
+    console.error('Erreur de suppression:', error);
+    throw error;
+  }
+}
+
+/**
+ * Calcule le total général
  */
 function calculateGrandTotal() {
   if (savedCalculations.length === 0) return;
@@ -750,50 +871,50 @@ function calculateGrandTotal() {
   });
 
   document.getElementById('grand-total').innerHTML = `
-    <h3>Grand Total</h3>
-    <p>Total Collection: ${totals.collection.toFixed(2)} €</p>
-    <p>Total Delivery: ${totals.delivery.toFixed(2)} €</p>
+    <h3>Total Général</h3>
+    <p>Total Collecte: ${totals.collection.toFixed(2)} €</p>
+    <p>Total Livraison: ${totals.delivery.toFixed(2)} €</p>
     <p>Total Ferry: ${totals.ferry.toFixed(2)} €</p>
-    <p>Total Margin/Discount: ${totals.margin.toFixed(2)} €</p>
+    <p>Total Marge/Remise: ${totals.margin.toFixed(2)} €</p>
     <hr>
-    <p><strong>Final Total: ${totals.grand.toFixed(2)} €</strong></p>
+    <p><strong>Total Final: ${totals.grand.toFixed(2)} €</strong></p>
   `;
 }
 
 // ======================
-// UTILITY FUNCTIONS
+// FONCTIONS UTILITAIRES
 // ======================
 
 /**
- * Resets the map
+ * Réinitialise la carte
  */
 window.resetMap = function() {
-  // Hide saved calculations and show total button
+  // Masque les calculs sauvegardés
   document.getElementById('saved-calculations').style.display = 'none';
   document.querySelector('.show-total-btn').style.display = 'none';
   
-  // Show total box
+  // Affiche la boîte de total
   document.getElementById('total-box').style.display = 'block';
   
-  // Remove markers and routes
+  // Supprime les marqueurs et itinéraires
   markers.forEach(marker => map.removeLayer(marker));
   markers = [];
   
   if (routingControl1) map.removeControl(routingControl1);
   if (routingControl2) map.removeControl(routingControl2);
 
-  // Reset state
+  // Réinitialise l'état
   selectionState.step = 1;
   selectionState.collectionStart = null;
   selectionState.ferryRoute = null;
   selectionState.deliveryEnd = null;
   CONFIG.ferryCost = 0;
 
-  // Reset UI
+  // Réinitialise l'UI
   updateStepUI();
   updateCurrentSelection();
   
-  // Reset displays
+  // Réinitialise les affichages
   const elementsToReset = [
     'distance1', 'distance2', 'collection-price', 'final-collection',
     'delivery-price', 'final-delivery', 'display-collection', 'display-delivery',
@@ -805,7 +926,7 @@ window.resetMap = function() {
     if (element) {
       element.textContent = id.includes('distance') ? '0 km' : 
                           id.includes('display') ? '0 €' : 
-                          id.includes('from') || id.includes('to') ? 'Not defined' : '0 €';
+                          id.includes('from') || id.includes('to') ? 'Non défini' : '0 €';
     }
   });
 
@@ -814,12 +935,12 @@ window.resetMap = function() {
   document.getElementById('ferry-select').value = '';
   document.getElementById('ferry-select').disabled = true;
 
-  // Reset margin slider
+  // Réinitialise le curseur de marge
   document.getElementById('margin-slider').value = 0;
   currentMargin = 0;
   updateMarginDisplay();
 
-  // Reset prices
+  // Réinitialise les prix
   updatePriceDisplays(
     CONFIG.collectionPricePerKm.toString(), 
     CONFIG.collectionMinPrice.toString()
@@ -830,7 +951,7 @@ window.resetMap = function() {
 };
 
 /**
- * Sets selection mode
+ * Définit le mode de sélection
  */
 window.setSelectionMode = function(mode) {
   selectionState.mode = mode;
@@ -839,18 +960,18 @@ window.setSelectionMode = function(mode) {
 };
 
 /**
- * Shows map error
+ * Affiche une erreur sur la carte
  */
 function showMapError(message) {
   const errorElement = document.getElementById('map-error');
   if (errorElement) {
-    errorElement.querySelector('p').textContent = message || "Unknown error";
+    errorElement.querySelector('p').textContent = message || "Erreur inconnue";
     errorElement.style.display = 'block';
   }
 }
 
 /**
- * Hides map error
+ * Masque l'erreur sur la carte
  */
 window.hideMapError = function() {
   const errorElement = document.getElementById('map-error');
@@ -860,11 +981,11 @@ window.hideMapError = function() {
 };
 
 // ======================
-// PDF GENERATION
+// GÉNÉRATION PDF
 // ======================
 
 /**
- * Generates PDF with only saved calculations
+ * Génère un PDF avec les calculs sauvegardés
  */
 window.generatePDF = async function() {
   const loadingElement = document.getElementById('loading');
@@ -877,67 +998,67 @@ window.generatePDF = async function() {
       unit: 'mm'
     });
 
-    // Header
+    // En-tête
     doc.setFontSize(20);
-    doc.text('Transport Cost Calculations', 105, 15, { align: 'center' });
+    doc.text('Calculs de Coût de Transport', 105, 15, { align: 'center' });
 
     // Date
     doc.setFontSize(12);
-    doc.text(`Report generated: ${new Date().toLocaleString()}`, 15, 25);
+    doc.text(`Rapport généré le: ${new Date().toLocaleString()}`, 15, 25);
     
     let yPosition = 35;
 
-    // Saved calculations
+    // Calculs sauvegardés
     if (savedCalculations.length > 0) {
       doc.setFontSize(16);
-      doc.text('Saved Calculations:', 15, yPosition);
+      doc.text('Calculs Sauvegardés:', 15, yPosition);
       yPosition += 10;
       
       savedCalculations.forEach((calc, index) => {
-        // New page if needed
+        // Nouvelle page si nécessaire
         if (yPosition > 250) {
           doc.addPage();
           yPosition = 20;
         }
         
         doc.setFontSize(12);
-        doc.text(`Calculation #${index + 1}`, 15, yPosition);
+        doc.text(`Calcul #${index + 1}`, 15, yPosition);
         yPosition += 7;
         
         doc.text(`Date: ${calc.date}`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`From: ${selectionState.collectionStart?.name || 'Not specified'}`, 20, yPosition);
+        doc.text(`De: ${selectionState.collectionStart?.name || 'Non spécifié'}`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`To: ${selectionState.deliveryEnd?.name || 'Not specified'}`, 20, yPosition);
+        doc.text(`À: ${selectionState.deliveryEnd?.name || 'Non spécifié'}`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`Collection: ${calc.collection}`, 20, yPosition);
+        doc.text(`Collecte: ${calc.collection}`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`Delivery: ${calc.delivery}`, 20, yPosition);
+        doc.text(`Livraison: ${calc.delivery}`, 20, yPosition);
         yPosition += 7;
         
         doc.text(`Ferry: ${calc.ferry}`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`Margin/Discount: ${calc.margin}`, 20, yPosition);
+        doc.text(`Marge/Remise: ${calc.margin}`, 20, yPosition);
         yPosition += 7;
         
         doc.setFontSize(14);
         doc.text(`Total: ${calc.total}`, 20, yPosition);
         yPosition += 15;
         
-        // Separator line
+        // Ligne de séparation
         doc.line(15, yPosition, 195, yPosition);
         yPosition += 10;
       });
       
-      // Grand totals
+      // Totaux généraux
       if (savedCalculations.length > 1) {
         doc.setFontSize(16);
-        doc.text('Grand Totals:', 15, yPosition);
+        doc.text('Totaux Généraux:', 15, yPosition);
         yPosition += 10;
         
         const totals = {
@@ -949,60 +1070,69 @@ window.generatePDF = async function() {
         };
         
         doc.setFontSize(12);
-        doc.text(`Total Collection: ${totals.collection.toFixed(2)} €`, 20, yPosition);
+        doc.text(`Total Collecte: ${totals.collection.toFixed(2)} €`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`Total Delivery: ${totals.delivery.toFixed(2)} €`, 20, yPosition);
+        doc.text(`Total Livraison: ${totals.delivery.toFixed(2)} €`, 20, yPosition);
         yPosition += 7;
         
         doc.text(`Total Ferry: ${totals.ferry.toFixed(2)} €`, 20, yPosition);
         yPosition += 7;
         
-        doc.text(`Total Margin/Discount: ${totals.margin.toFixed(2)} €`, 20, yPosition);
+        doc.text(`Total Marge/Remise: ${totals.margin.toFixed(2)} €`, 20, yPosition);
         yPosition += 7;
         
         doc.setFontSize(14);
-        doc.text(`Final Total: ${totals.grand.toFixed(2)} €`, 20, yPosition);
+        doc.text(`Total Final: ${totals.grand.toFixed(2)} €`, 20, yPosition);
       }
     } else {
       doc.setFontSize(14);
-      doc.text('No saved calculations to display', 15, yPosition);
+      doc.text('Aucun calcul sauvegardé à afficher', 15, yPosition);
     }
 
-    doc.save('transport_calculations.pdf');
+    doc.save('calculs_transport.pdf');
   } catch (error) {
-    console.error("PDF generation error:", error);
-    showMapError("PDF generation error");
+    console.error("Erreur de génération PDF:", error);
+    showMapError("Erreur de génération du PDF");
   } finally {
     if (loadingElement) loadingElement.style.display = 'none';
   }
 };
 
 // ======================
-// INITIALIZATION
+// INITIALISATION
 // ======================
 
-// Wait for DOM to load
+// Attend que le DOM soit chargé
 document.addEventListener('DOMContentLoaded', function() {
-  // Check if Leaflet is loaded
-  if (typeof L === 'undefined') {
-    console.error("Leaflet not loaded!");
-    showMapError("Library loading error");
+  // Vérifie que SharePoint est chargé
+  if (typeof _spPageContextInfo === 'undefined') {
+    console.error("SharePoint non détecté!");
+    showMapError("Cette application doit s'exécuter dans SharePoint");
     return;
   }
 
-  // Initialize system
-  setTimeout(() => {
+  // Vérifie que Leaflet est chargé
+  if (typeof L === 'undefined') {
+    console.error("Leaflet non chargé!");
+    showMapError("Erreur de chargement des bibliothèques");
+    return;
+  }
+
+  // Initialise le système après un court délai
+  setTimeout(async () => {
     try {
       initializeTransportSystem();
+      await loadFerriesFromSharePoint();
       
-      // Show saved calculations if any
+      // Affiche les calculs sauvegardés s'il y en a
       if (savedCalculations.length > 0) {
         document.querySelector('.show-total-btn').style.display = 'inline-block';
         document.getElementById('saved-calculations').style.display = 'block';
       }
     } catch (error) {
-      console.error("Initialization error:", error);
+      console.error("Erreur d'initialisation:", error);
+      showMapError("Erreur d'initialisation");
     }
   }, 100);
 });
