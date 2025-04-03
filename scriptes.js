@@ -31,6 +31,74 @@ const selectionState = {
   deliveryEnd: null
 };
 
+
+//Api List ferry 
+// URL de votre API SharePoint
+const apiUrl = "https://hendrickeuropean.sharepoint.com/sites/TestDeveloptment/_api/web/lists/getbytitle('Ferry%20Overview')/items";
+
+// Fonction pour récupérer et afficher les données
+async function loadFerries() {
+  try {
+    const response = await fetch(apiUrl, {
+      headers: {
+        "Accept": "application/json;odata=verbose"
+      }
+    });
+    
+    if (!response.ok) throw new Error("Erreur réseau");
+
+    const data = await response.text();
+    const parser = new DOMParser();
+    const xmlDoc = parser.parseFromString(data, "application/xml");
+    
+    // Extraire les entrées
+    const entries = xmlDoc.getElementsByTagName("entry");
+    const select = document.getElementById("ferry-select");
+    const tableBody = document.querySelector("#ferry-table tbody");
+
+    for (let entry of entries) {
+      const properties = entry.getElementsByTagName("m:properties")[0];
+      
+      // Extraire les valeurs
+      const title = properties.getElementsByTagName("d:Title")[0]?.textContent || "N/A";
+      const price = properties.getElementsByTagName("d:Price")[0]?.getAttribute("m:type") === "Edm.Double" 
+        ? properties.getElementsByTagName("d:Price")[0].textContent 
+        : "0";
+      const from = JSON.parse(properties.getElementsByTagName("d:From")[0]?.textContent || '{}').DisplayName || "N/A";
+      const to = JSON.parse(properties.getElementsByTagName("d:To")[0]?.textContent || '{}').DisplayName || "N/A";
+      const lat = properties.getElementsByTagName("d:LatitudeFrom")[0]?.textContent || "0";
+      const lon = properties.getElementsByTagName("d:LongitudeFrom")[0]?.textContent || "0";
+      const pricePerKm = properties.getElementsByTagName("d:Priceperkm")[0]?.textContent || "0";
+      const minimum = properties.getElementsByTagName("d:Minimum")[0]?.textContent || "0";
+
+      // Ajouter une option au select
+      const option = document.createElement("option");
+      option.value = `${price}.${from}.${to}.${pricePerKm}.${minimum}`;
+      option.textContent = `${title}: ${from} → ${to} (${price}€)`;
+      select.appendChild(option);
+
+      // Ajouter une ligne au tableau
+      const row = document.createElement("tr");
+      row.innerHTML = `
+        <td>${from}</td>
+        <td>${to}</td>
+        <td>${price}€</td>
+        <td>${lat}</td>
+        <td>${lon}</td>
+      `;
+      tableBody.appendChild(row);
+    }
+
+  } catch (error) {
+    console.error("Erreur:", error);
+    alert("Impossible de charger les données des ferries");
+  }
+}
+
+// Charger les données au démarrage
+document.addEventListener("DOMContentLoaded", loadFerries);
+
+
 // ======================
 // INITIALIZATION
 // ======================
