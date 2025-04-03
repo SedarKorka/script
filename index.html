@@ -50,44 +50,29 @@
           <div class="ferry-selection">
             <h3>Select your Ferry:</h3>
             <select id="ferry-select">
-              <option value="">-- Select Ferry --</option>
-              {% fetchxml ferryQuery %}
-              <fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
-                <entity name="cre74_ferryoverview">
-                <attribute name="cre74_ferryoverviewid"/>
-                <attribute name="cre74_title"/>
-                <attribute name="cre74_type1"/>
-                <attribute name="cre74_street0"/>
-                <attribute name="cre74_state0"/>
-                <attribute name="cre74_postalcode0"/>
-                <attribute name="cre74_dispname0"/>
-                <attribute name="cre74_countryorregion0"/>
-                <attribute name="cre74_city0"/>
-                <attribute name="cre74_priceperkm"/>
-                <attribute name="cre74_modified"/>
-                <attribute name="cre74_minimum"/>
-                <attribute name="cre74_longitudefrom"/>
-                <attribute name="cre74_latitudefrom"/>
-                <attribute name="cre74_externalprimarykey"/>
-                <attribute name="cre74_street"/>
-                <attribute name="cre74_state"/>
-                <attribute name="cre74_postalcode"/>
-                <attribute name="cre74_dispname"/>
-                <attribute name="cre74_countryorregion"/>
-                <attribute name="cre74_city"/>
-                <attribute name="cre74_price"/>
-                <attribute name="cre74_created"/>
-                <attribute name="cre74_complianceassetid"/>
-                <attribute name="cre74_odatacolortag"/>
-                </entity>
+                <option value="">-- Select Ferry --</option>
+                {% fetchxml ferryQuery %}
+                <fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+                  <entity name="list_name">
+                    <attribute name="Title"/>
+                    <attribute name="Price"/>
+                    <attribute name="DispName"/>
+                    <attribute name="DispName0"/>
+                    <attribute name="PricePerKm"/>
+                    <attribute name="Minimum"/>
+                    <attribute name="DispName"/> <!-- Nom du terminal -->
+                    <attribute name="LatitudeFrom"/> <!-- Colonne latitude -->
+                    <attribute name="LongitudeFrom"/> <!-- Colonne longitude -->
+                  </entity>
                 </fetch>
-              {% endfetchxml %} 
-              {% for ferry in ferryQuery.results.entities %}
-                <option value="{{ ferry.cre74_price }}.{{ ferry.cre74_dispname }}.{{ ferry.cre74_dispname0 }}.{{ ferry.cre74_priceperkm }}.{{ ferry.cre74_minimum }}">
-                {{ ferry.cre74_title }}: {{ ferry.cre74_dispname }} → {{ ferry.cre74_dispname0 }}
-                </option>
-              {% endfor %}
-            </select>
+                {% endfetchxml %}
+                
+                {% for ferry in ferryQuery.results.entities %}
+                  <option value="{{ ferry.Price}}.{{ ferry.DispName}}.{{ ferry.DispName0}}.{{ ferry.PricePerKm}}.{{ ferry.Minimum}}">
+                    {{ ferry.Title }}: {{ ferry.DispName }} → {{ ferry.DispName0 }}
+                  </option>
+                {% endfor %}
+              </select>
 
             <table border="1" style="display: none;">
               <thead>
@@ -101,9 +86,9 @@
               <tbody>
                 {% for ferry in ferryQuery.results.entities %}
                   <tr>
-                    <td>{{ ferry.cre74_dispname }}</td>
-                    <td>{{ ferry.cre74_latitudefrom }}</td>
-                    <td>{{ ferry.cre74_longitudefrom }}</td>
+                    <td>{{ ferry.DispName }}</td>
+                    <td>{{ ferry.LatitudeFrom }}</td>
+                    <td>{{ ferry.LongitudeFrom }}</td>
                   </tr>
                 {% endfor %}
               </tbody>
