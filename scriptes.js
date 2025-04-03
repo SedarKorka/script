@@ -33,54 +33,6 @@ const selectionState = {
 
 
 //Api List ferry 
-// URL de votre API SharePoint
-$(document).ready(function() {
-    // Charge les scripts SharePoint
-    SP.SOD.executeFunc('sp.js', 'SP.ClientContext', function() {
-        const ctx = new SP.ClientContext.get_current();
-        const web = ctx.get_web();
-        const list = web.get_lists().getByTitle("Ferry Overview1");
-        const items = list.getItems(SP.CamlQuery.createAllItemsQuery());
-        
-        ctx.load(items);
-        
-        ctx.executeQueryAsync(
-            function() {
-                const itemArray = [];
-                const enumerator = items.getEnumerator();
-                
-                while (enumerator.moveNext()) {
-                    const item = enumerator.get_current();
-                    itemArray.push({
-                        ID: item.get_id(),
-                        Title: item.get_item("Title")
-                        // Ajoutez d'autres champs ici
-                    });
-                }
-                
-                displayData(itemArray);
-            },
-            function(sender, args) {
-                console.error("Erreur:", args.get_message());
-                $("#results").html(`<p>Erreur: ${args.get_message()}</p>`);
-            }
-        );
-    });
-});
-
-function displayData(items) {
-    let html = '<table border="1"><tr><th>ID</th><th>Title</th></tr>';
-    
-    items.forEach(item => {
-        html += `<tr><td>${item.ID}</td><td>${item.Title}</td></tr>`;
-    });
-    
-    $("#results").html(html);
-} 
-
-// Charger les données au démarrage
-document.addEventListener("DOMContentLoaded", loadFerries);
-
 
 // ======================
 // INITIALIZATION
