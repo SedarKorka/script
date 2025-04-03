@@ -50,21 +50,49 @@
           <div class="ferry-selection">
             <h3>Select your Ferry:</h3>
             <select id="ferry-select">
-  <option value="">-- Select Ferry --</option>
-</select>
+                <option value="">-- Select Ferry --</option>
+                {% fetchxml ferryQuery %}
+                <fetch version="1.0" output-format="xml-platform" mapping="logical" distinct="false">
+                  <entity name="list_name">
+                    <attribute name="Title"/>
+                    <attribute name="Price"/>
+                    <attribute name="DispName"/>
+                    <attribute name="DispName0"/>
+                    <attribute name="PricePerKm"/>
+                    <attribute name="Minimum"/>
+                    <attribute name="DispName"/> <!-- Nom du terminal -->
+                    <attribute name="LatitudeFrom"/> <!-- Colonne latitude -->
+                    <attribute name="LongitudeFrom"/> <!-- Colonne longitude -->
+                  </entity>
+                </fetch>
+                {% endfetchxml %}
+                
+                {% for ferry in ferryQuery.results.entities %}
+                  <option value="{{ ferry.Price}}.{{ ferry.DispName}}.{{ ferry.DispName0}}.{{ ferry.PricePerKm}}.{{ ferry.Minimum}}">
+                    {{ ferry.Title }}: {{ ferry.DispName }} → {{ ferry.DispName0 }}
+                  </option>
+                {% endfor %}
+              </select>
 
-<table id="ferry-table" border="1" style="display: none;">
-  <thead>
-    <tr>
-      <th>Terminal de départ</th>
-      <th>Terminal de destination</th>
-      <th>Prix</th>
-      <th>Latitude</th>
-      <th>Longitude</th>
-    </tr>
-  </thead>
-  <tbody></tbody>
-</table>
+            <table border="1" style="display: none;">
+              <thead>
+                <tr>
+                  
+                  <th>Terminal de destination</th>
+                  <th>Latitude</th>
+                  <th>Longitude</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for ferry in ferryQuery.results.entities %}
+                  <tr>
+                    <td>{{ ferry.DispName }}</td>
+                    <td>{{ ferry.LatitudeFrom }}</td>
+                    <td>{{ ferry.LongitudeFrom }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
 
            
             

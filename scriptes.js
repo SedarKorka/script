@@ -34,66 +34,49 @@ const selectionState = {
 
 //Api List ferry 
 // URL de votre API SharePoint
-const apiUrl = "https://hendrickeuropean.sharepoint.com/sites/TestDeveloptment/_api/web/lists/getbytitle('Ferry%20Overview1')/items";
+$(document).ready(function() {
+    // Charge les scripts SharePoint
+    SP.SOD.executeFunc('sp.js', 'SP.ClientContext', function() {
+        const ctx = new SP.ClientContext.get_current();
+        const web = ctx.get_web();
+        const list = web.get_lists().getByTitle("Ferry Overview1");
+        const items = list.getItems(SP.CamlQuery.createAllItemsQuery());
+        
+        ctx.load(items);
+        
+        ctx.executeQueryAsync(
+            function() {
+                const itemArray = [];
+                const enumerator = items.getEnumerator();
+                
+                while (enumerator.moveNext()) {
+                    const item = enumerator.get_current();
+                    itemArray.push({
+                        ID: item.get_id(),
+                        Title: item.get_item("Title")
+                        // Ajoutez d'autres champs ici
+                    });
+                }
+                
+                displayData(itemArray);
+            },
+            function(sender, args) {
+                console.error("Erreur:", args.get_message());
+                $("#results").html(`<p>Erreur: ${args.get_message()}</p>`);
+            }
+        );
+    });
+});
 
-// Fonction pour récupérer et afficher les données
-async function loadFerries() {
-  try {
-    const response = await fetch(apiUrl, {
-      headers: {
-        "Accept": "application/json;odata=verbose"
-      }
+function displayData(items) {
+    let html = '<table border="1"><tr><th>ID</th><th>Title</th></tr>';
+    
+    items.forEach(item => {
+        html += `<tr><td>${item.ID}</td><td>${item.Title}</td></tr>`;
     });
     
-    if (!response.ok) throw new Error("Erreur réseau");
-
-    const data = await response.text();
-    const parser = new DOMParser();
-    const xmlDoc = parser.parseFromString(data, "application/xml");
-    
-    // Extraire les entrées
-    const entries = xmlDoc.getElementsByTagName("entry");
-    const select = document.getElementById("ferry-select");
-    const tableBody = document.querySelector("#ferry-table tbody");
-
-    for (let entry of entries) {
-      const properties = entry.getElementsByTagName("m:properties")[0];
-      
-      // Extraire les valeurs
-      const title = properties.getElementsByTagName("d:Title")[0]?.textContent || "N/A";
-      const price = properties.getElementsByTagName("d:Price")[0]?.getAttribute("m:type") === "Edm.Double" 
-        ? properties.getElementsByTagName("d:Price")[0].textContent 
-        : "0";
-      const from = JSON.parse(properties.getElementsByTagName("d:From")[0]?.textContent || '{}').DisplayName || "N/A";
-      const to = JSON.parse(properties.getElementsByTagName("d:To")[0]?.textContent || '{}').DisplayName || "N/A";
-      const lat = properties.getElementsByTagName("d:LatitudeFrom")[0]?.textContent || "0";
-      const lon = properties.getElementsByTagName("d:LongitudeFrom")[0]?.textContent || "0";
-      const pricePerKm = properties.getElementsByTagName("d:Priceperkm")[0]?.textContent || "0";
-      const minimum = properties.getElementsByTagName("d:Minimum")[0]?.textContent || "0";
-
-      // Ajouter une option au select
-      const option = document.createElement("option");
-      option.value = `${price}.${from}.${to}.${pricePerKm}.${minimum}`;
-      option.textContent = `${title}: ${from} → ${to} (${price}€)`;
-      select.appendChild(option);
-
-      // Ajouter une ligne au tableau
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${from}</td>
-        <td>${to}</td>
-        <td>${price}€</td>
-        <td>${lat}</td>
-        <td>${lon}</td>
-      `;
-      tableBody.appendChild(row);
-    }
-
-  } catch (error) {
-    console.error("Erreur:", error);
-    alert("Impossible de charger les données des ferries");
-  }
-}
+    $("#results").html(html);
+} 
 
 // Charger les données au démarrage
 document.addEventListener("DOMContentLoaded", loadFerries);
