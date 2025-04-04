@@ -33,15 +33,7 @@ const selectionState = {
 
 
 //Api List ferry 
-document.addEventListener("DOMContentLoaded", function() {
-    $pnp.sp.web.lists.getByTitle("Ferry Overview").items.get()
-      .then(data => {
-        console.log(data); // Affichez ces données dans votre HTML
-        data.forEach(item => {
-          document.getElementById("liste-container").innerHTML += `<div>${item.Title}</div>`;
-        });
-      });
-  });
+
 // ======================
 // INITIALIZATION
 // ======================
@@ -995,6 +987,13 @@ window.generatePDF = async function() {
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', function() {
+    $pnp.sp.web.lists.getByTitle("Ferry Overview1").items.get()
+      .then(data => {
+        console.log(data); // Affichez ces données dans votre HTML
+        data.forEach(item => {
+          document.getElementById("liste-container").innerHTML += `<div>${item.Title}</div>`;
+        });
+      });
   // Check if Leaflet is loaded
   if (typeof L === 'undefined') {
     console.error("Leaflet not loaded!");
