@@ -987,7 +987,22 @@ window.generatePDF = async function() {
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialiser PnPJS avec le contexte SharePoint
+  // Initialize system
+  setTimeout(() => {
+    try {
+      initializeTransportSystem();
+      
+      // Show saved calculations if any
+      if (savedCalculations.length > 0) {
+        document.querySelector('.show-total-btn').style.display = 'inline-block';
+        document.getElementById('saved-calculations').style.display = 'block';
+      }
+    } catch (error) {
+      console.error("Initialization error:", error);
+    }
+  }, 100);
+
+  // Initialiser PnPJS avec le contexte SharePoint
   $pnp.spfxContext(this.context); // Si vous êtes dans SPFx
   // OU pour SharePoint Online moderne :
   $pnp.sp.setup({
@@ -1026,19 +1041,4 @@ document.addEventListener('DOMContentLoaded', function() {
     showMapError("Library loading error");
     return;
   }
-
-  // Initialize system
-  setTimeout(() => {
-    try {
-      initializeTransportSystem();
-      
-      // Show saved calculations if any
-      if (savedCalculations.length > 0) {
-        document.querySelector('.show-total-btn').style.display = 'inline-block';
-        document.getElementById('saved-calculations').style.display = 'block';
-      }
-    } catch (error) {
-      console.error("Initialization error:", error);
-    }
-  }, 100);
 });
