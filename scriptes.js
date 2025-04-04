@@ -987,13 +987,39 @@ window.generatePDF = async function() {
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', function() {
-    $pnp.sp.web.lists.getByTitle("Ferry Overview1").items.get()
-      .then(data => {
-        console.log(data); // Affichez ces données dans votre HTML
-        data.forEach(item => {
-          document.getElementById("liste-container").innerHTML += `<div>${item.Title}</div>`;
-        });
+    // Initialiser PnPJS avec le contexte SharePoint
+  $pnp.spfxContext(this.context); // Si vous êtes dans SPFx
+  // OU pour SharePoint Online moderne :
+  $pnp.sp.setup({
+    sp: {
+      baseUrl: "https://hendrickeuropean.sharepoint.com/sites/TestDeveloptment"
+    }
+  });
+
+  // Récupérer les données de la liste
+  $pnp.sp.web.lists.getByTitle("Ferry Overview1").items
+    .select("Title", "To", "Type_1") // Spécifiez les champs à récupérer
+    .get()
+    .then(data => {
+      console.log("Données récupérées:", data);
+      const container = document.getElementById("liste-container");
+      container.innerHTML = ""; // Vider le conteneur
+      
+      data.forEach(item => {
+        container.innerHTML += `
+          <div class="ferry-item">
+            <h3>${item.Title || 'Sans titre'}</h3>
+            <p>Autres champs: ${item.Type_1 || ''}</p>
+          </div>
+        `;
       });
+    })
+    .catch(error => {
+      console.error("Erreur:", error);
+      document.getElementById("liste-container").innerHTML = `
+        <div class="error">Erreur de chargement des données. Vérifiez la console.</div>
+      `;
+    });
   // Check if Leaflet is loaded
   if (typeof L === 'undefined') {
     console.error("Leaflet not loaded!");
