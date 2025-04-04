@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Lecture des données FerryOverview</title>
+    <script src="https://unpkg.com/@pnp/pnpjs@2.11.0/dist/pnpjs.min.js"></script>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background-color: #f5f5f5; }
+        .loading, .error, .success { margin-top: 10px; }
+        .error { color: red; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Liste SharePoint : FerryOverview</h1>
+    <div id="status-message" class="loading">Chargement des données...</div>
+    <div id="data-container"></div>
+
+    <script>
+        (async function () {
+            const status = document.getElementById('status-message');
+            const container = document.getElementById('data-container');
+
+            // Configuration de PnP JS
+            pnp.sp.setup({
+                sp: {
+                    // Pas besoin de baseUrl car la page est dans SharePoint
+                }
+            });
+
+            try {
+                const items = await pnp.sp.web.lists.getByTitle("FerryOverview").items
+                    .select("ID", "Title", "Created", "Modified", "Author/Title")
+                    .expand("Author")
+                    .top(100)
+                    .get();
+
+                if (!items.length) {
+                    status.textContent = "Aucun élément trouvé.";
+                    return;
+                }
+
+                status.innerHTML = `<span class="success">${items.length} éléments récupérés.</span>`;
+
+                // Création du tableau
+                let html = '<table><thead><tr>';
+                html += '<th>ID</th><th>Titre</th><th>Créé</th><th>Modifié</th><th>Auteur</th>';
+                html += '</tr></thead><tbody>';
+
+                items.forEach(item => {
+                    html += `<tr>
+                        <td>${item.ID}</td>
+                        <td>${item.Title}</td>
+                        <td>${new Date(item.Created).toLocaleString()}</td>
+                        <td>${new Date(item.Modified).toLocaleString()}</td>
+                        <td>${item.Author?.Title || ''}</td>
+                    </tr>`;
+                });
+
+                html += '</tbody></table>';
+                container.innerHTML = html;
+
+            } catch (error) {
+                console.error("Erreur lors de la récupération :", error);
+                status.innerHTML = `<p class="error">Erreur lors du chargement : ${error.message}</p>`;
+            }
+        })();
+    </script>
+</body>
+</html>

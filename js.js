@@ -31,6 +31,97 @@ const selectionState = {
   deliveryEnd: null
 };
 
+ // Configuration
+ const SHAREPOINT_API_URL = "https://hendrickeuropean.sharepoint.com/sites/TestDeveloptment/_api/web/lists/getbytitle('Ferry%20Overview')/items";
+    
+ // Fonction principale pour charger les ferries
+ async function loadFerries() {
+   const loadingElement = document.getElementById('api-loading');
+   const errorElement = document.getElementById('api-error');
+   const selectElement = document.getElementById('ferry-select');
+   
+   loadingElement.style.display = 'block';
+   errorElement.style.display = 'none';
+   
+   try {
+     // Note: Dans un environnement réel, utilisez une authentification appropriée
+     const response = await fetch(SHAREPOINT_API_URL, {
+       headers: {
+         'Accept': 'application/json;odata=verbose',
+         'Content-Type': 'application/json;odata=verbose'
+       },
+       credentials: 'include' // Nécessaire pour l'authentification SharePoint
+     });
+     
+     if (!response.ok) throw new Error('Erreur réseau');
+     
+     const data = await response.json();
+     populateFerryDropdown(data.d.results);
+     loadingElement.style.display = 'none';
+   } catch (error) {
+     console.error("Erreur de chargement des ferries:", error);
+     loadingElement.style.display = 'none';
+     errorElement.style.display = 'block';
+     selectElement.innerHTML = '<option value="">-- Erreur de chargement --</option>';
+   }
+ }
+ 
+ function populateFerryDropdown(ferries) {
+   const select = document.getElementById('ferry-select');
+   select.innerHTML = '<option value="">-- Select Ferry --</option>';
+   
+   ferries.forEach(ferry => {
+     const option = document.createElement('option');
+     option.value = `${ferry.Price}.${ferry.DispName}.${ferry.DispName0}.${ferry.PricePerKm}.${ferry.Minimum}`;
+     option.dataset.priceperkm = ferry.PricePerKm;
+     option.dataset.minimum = ferry.Minimum;
+     option.textContent = `${ferry.Title}: ${ferry.DispName} → ${ferry.DispName0}`;
+     select.appendChild(option);
+   });
+ }
+ 
+ // Charger les ferries au démarrage
+ document.addEventListener('DOMContentLoaded', () => {
+   loadFerries();
+   // Initialiser votre carte et autres composants ici
+ });
+ 
+//Api List ferry 
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialiser PnPJS avec le contexte SharePoint
+    $pnp.spfxContext(this.context); // Si vous êtes dans SPFx
+    // OU pour SharePoint Online moderne :
+    $pnp.sp.setup({
+      sp: {
+        baseUrl: "https://hendrickeuropean.sharepoint.com/sites/TestDeveloptment/"
+      }
+    });
+  
+    // Récupérer les données de la liste
+    $pnp.sp.web.lists.getByTitle("Ferry Overview1").items
+      .select("Title", "To", "OtherField2") // Spécifiez les champs à récupérer
+      .get()
+      .then(data => {
+        console.log("Données récupérées:", data);
+        const container = document.getElementById("liste-container");
+        container.innerHTML = ""; // Vider le conteneur
+        
+        data.forEach(item => {
+          container.innerHTML += `
+            <div class="ferry-item">
+              <h3>${item.Title || 'Sans titre'}</h3>
+              <p>Autres champs: ${item.OtherField1 || ''}</p>
+            </div>
+          `;
+        });
+      })
+      .catch(error => {
+        console.error("Erreur:", error);
+        document.getElementById("liste-container").innerHTML = `
+          <div class="error">Erreur de chargement des données. Vérifiez la console.</div>
+        `;
+      });
+  });
 // ======================
 // INITIALIZATION
 // ======================

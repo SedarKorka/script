@@ -6,7 +6,9 @@ body {
     background-color: #f5f5f5;
     line-height: 1.6;
   }
-  
+  table{
+    display: none;
+  }
   /* Transport system styles */
   .transport-system {
     display: block;
