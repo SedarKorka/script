@@ -33,7 +33,15 @@ const selectionState = {
 
 
 //Api List ferry 
-
+document.addEventListener("DOMContentLoaded", function() {
+    $pnp.sp.web.lists.getByTitle("Ferry Overview").items.get()
+      .then(data => {
+        console.log(data); // Affichez ces données dans votre HTML
+        data.forEach(item => {
+          document.getElementById("liste-container").innerHTML += `<div>${item.Title}</div>`;
+        });
+      });
+  });
 // ======================
 // INITIALIZATION
 // ======================
